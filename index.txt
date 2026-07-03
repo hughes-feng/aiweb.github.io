@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- 优化：禁用移动端点击延迟 -->
+    <meta name="touch-action" content="manipulation">
+    <title>FS 园区网产线 | 多媒体设计</title>
+    <!-- 外部资源 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://unpkg.com/@studio-freight/lenis@1.0.32/dist/lenis.min.js"></script>
+    <!-- JS Confetti (用于点赞撒花特效) -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        /* ===================== 1. 全局变量统一（核心优化） ===================== */
+        :root {
+            /* 颜色 */
+            --color-white: #ffffff;
+            --color-gray-light: #f5f5f5;
+            --color-gray: #e5e5e5;
+            --color-gray-text: #666666;
+            --color-main: #dc2626;
+            --color-like: #f43f5e;
+            --color-danger: #ef4444;
+            /* 动画时长 */
+            --anim-fast: 0.2s;
+            --anim-base: 0.3s;
+            --anim-slow: 0.6s;
+            /* 圆角、阴影 */
+            --radius-md: 10px;
+            --radius-lg: 16px;
+            --radius-full: 999px;
+            --shadow-base: 0 2px 8px rgba(0, 0, 0, 0.1);
+            --shadow-hover: 0 10px 30px -10px rgba(220, 38, 38, 0.25);
+            /* 层级规范 */
+            --z-cursor: 99998;
+            --z-cursor-core: 99999;
+            --z-nav: 999;
+            --z-like: 10;
+            --z-modal: 1000;
+            /* 过渡函数统一 */
+            --ease-base: cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        /* ===================== 2. 全局重置 & 基础样式 ===================== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        @media (pointer: fine) { body { cursor: none; } } /* PC端隐藏默认鼠标 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--color-white);
+            color: #111;
+            overflow-x: hidden;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+        ::selection { background-color: var(--color-main); color: #fff; }
+        ::-webkit-scrollbar { display: none; }
+        button, a { font: inherit; color: inherit; text-decoration: none; cursor: none; }
+
+        /* ===================== 3. 跟随光标（性能优化：仅 transform） ===================== */
+        .cursor-core, .cursor-glow {
+            position: fixed; top: 0; left: 0;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            transition: width var(--anim-base) ease, height var(--anim-base) ease, opacity var(--anim-base) ease;
+            will-change: transform;
+        }
+        .cursor-core {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: var(--color-main);
+            opacity: 0.8;
+            z-index: var(--z-cursor-core);
+        }
+        .cursor-glow {
+            width: 60px; height: 60px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(220,38,38,0.3) 0%, rgba(220,38,38,0) 70%);
+            z-index: var(--z-cursor);
+        }
+        /* 可点击区域光标放大 */
+        body.is-hover .cursor-core { width: 15px; height: 15px; opacity: 1; }
+        body.is-hover .cursor-glow { width: 90px; height: 90px; }
+
+        /* 平滑滚动容器 */
+        html.lenis { height: auto; }
+        .lenis.lenis-smooth { scroll-behavior: auto !important; }
+        .lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+
+        /* ===================== 4. 导航栏 ===================== */
+        .navbar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: var(--z-nav);
+            background: rgba(255, 255, 255, 0.94);
+            border-bottom: 1px solid var(--color-gray);
+            backdrop-filter: blur(20px);
+            transition: background var(--anim-base), box-shadow var(--anim-base);
+        }
+        .navbar.scrolled {
+            background: var(--color-white); box-shadow: var(--shadow-base);
+        }
+        .nav-link {
+            padding: 8px 16px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500;
+            color: var(--color-gray-text); transition: all var(--anim-base) var(--ease-base); display: inline-block;
+        }
+        .nav-link:hover {
+            color: var(--color-main); background: rgba(220, 38, 38, 0.06); transform: translateY(-2px);
+        }
+
+        /* 标题通用 */
+        .hero-title { font-size: clamp(2.5rem, 6vw, 5rem); line-height: 1.1; font-weight: 800; letter-spacing: -0.02em; }
+        .section-title { font-size: clamp(2rem, 4vw, 3.5rem); font-weight: 700; letter-spacing: -0.01em; margin-bottom: 3rem; position: relative; display: inline-block; }
+        .section-title::after {
+            content: ''; position: absolute; left: 0; bottom: -10px; width: 40px; height: 4px;
+            background: var(--color-main); border-radius: 2px;
+        }
+        .section-title.center::after { left: 50%; transform: translateX(-50%); }
+
+        /* ===================== 5. 卡片通用 ===================== */
+        .card {
+            background: var(--color-white); border: 1px solid var(--color-gray); border-radius: var(--radius-lg);
+            transition: all var(--anim-base) var(--ease-base); position: relative; overflow: visible;
+        }
+        .card::before {
+            content: ''; position: absolute; inset: 0;
+            background: radial-gradient(600px circle at var(--mouse-x) var(--mouse-y), rgba(220, 38, 38, 0.06), transparent 40%);
+            opacity: 0; transition: opacity var(--anim-base); pointer-events: none; border-radius: var(--radius-lg);
+        }
+        .card:hover::before { opacity: 1; }
+        .card:hover {
+            transform: translateY(-8px) scale(1.02); border-color: var(--color-main); box-shadow: var(--shadow-hover);
+        }
+        .video-card-img { transition: transform 0.7s var(--ease-base); will-change: transform; }
+        .group:hover .video-card-img { transform: scale(1.05); }
+        .tag { display: inline-block; padding: 6px 14px; border-radius: var(--radius-full); font-size: 13px; font-weight: 600; color: #fff; background: var(--color-main); }
+
+        /* ===================== 6. 按钮通用 ===================== */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 28px;
+            border-radius: var(--radius-full); font-weight: 600; transition: all var(--anim-base) var(--ease-base); border: none; user-select: none;
+        }
+        .btn-red { background: var(--color-main); color: #fff; }
+        .btn-red:hover { background: #b91c1c; transform: translateY(-2px) scale(1.03); box-shadow: 0 8px 20px rgba(220, 38, 38, 0.35); }
+        .btn-gray { background: var(--color-gray-light); color: #111; }
+        .btn-gray:hover { background: var(--color-gray); transform: translateY(-2px) scale(1.03); }
+        .btn:active { transform: translateY(0) scale(0.97); }
+
+        /* ===================== 7. 爱心点赞按钮 ===================== */
+        .like-btn {
+            position: absolute; bottom: 12px; right: 12px; width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.9);
+            border-radius: 50%; box-shadow: var(--shadow-base); z-index: var(--z-like);
+            transition: all var(--anim-base) var(--ease-base); font-size: 20px; color: #ccc; user-select: none;
+        }
+        .like-btn:hover { transform: scale(1.15); }
+        .like-btn:active { transform: scale(0.9); }
+        .like-btn.active { color: var(--color-like); }
+
+        /* ===================== 8. 弹窗样式 ===================== */
+        .modal-overlay {
+            position: fixed; inset: 0; z-index: var(--z-modal); background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(8px);
+            display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; visibility: hidden;
+            transition: opacity var(--anim-base), visibility var(--anim-base);
+        }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+        .modal-content {
+            background: var(--color-white); border-radius: var(--radius-lg); width: 100%; max-width: 720px; max-height: 90vh; overflow-y: auto;
+            transform: scale(0.9) translateY(20px); transition: transform var(--anim-base) var(--ease-base);
+        }
+        .modal-overlay.active .modal-content { transform: scale(1) translateY(0); }
+        .modal-close {
+            position: absolute; top: 16px; right: 16px; width: 36px; height: 36px; border-radius: 50%;
+            background: var(--color-gray-light); display: flex; align-items: center; justify-content: center;
+            transition: all var(--anim-base) var(--ease-base); z-index: 2;
+        }
+        .modal-close:hover { background: var(--color-main); color: #fff; transform: rotate(90deg); }
+        video { outline: none; }
+
+        /* ===================== 9. 表单样式 ===================== */
+        .form-input, .form-textarea {
+            width: 100%; padding: 12px 16px; border: 1px solid var(--color-gray); border-radius: var(--radius-md);
+            transition: border-color var(--anim-base), box-shadow var(--anim-base); font-size: 14px; outline: none; background: var(--color-white);
+        }
+        .form-input:focus, .form-textarea:focus { border-color: var(--color-main); box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1); }
+        .form-input.error, .form-textarea.error { border-color: var(--color-danger); }
+        .file-area {
+            border: 2px dashed var(--color-gray); border-radius: var(--radius-md); padding: 40px 20px; text-align: center;
+            transition: border-color var(--anim-base); 
+        }
+        .file-area:hover { border-color: var(--color-main); }
+        .file-preview { max-width: 100%; max-height: 240px; margin: 12px auto 0; border-radius: var(--radius-md); display: none; }
+        .error-tip { font-size: 12px; color: var(--color-danger); margin-top: 4px; display: none; }
+
+        /* ===================== 10. 布局与动画 ===================== */
+        .ai-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4rem 2rem; position: relative; }
+        .ai-card-1 { grid-column: 1 / 2; grid-row: 1 / 2; transform: translateY(0); }
+        .ai-card-2 { grid-column: 2 / 3; grid-row: 1 / 2; transform: translateY(2rem); }
+        .ai-card-3 { grid-column: 1 / 2; grid-row: 2 / 3; transform: translateY(-1rem); }
+        .ai-card-4 { grid-column: 2 / 3; grid-row: 2 / 3; transform: translateY(1rem); }
+        .ai-card-5 { grid-column: 1 / 3; grid-row: 3 / 4; margin: 0 auto; max-width: 600px; width: 100%; }
+
+        .gs_reveal { opacity: 0; transform: translateY(40px); transition: opacity var(--anim-slow) ease, transform var(--anim-slow) ease; }
+        .gs_reveal.active { opacity: 1; transform: translateY(0); }
+
+        /* ===================== 11. 移动端适配 ===================== */
+        @media (max-width: 768px) {
+            .cursor-core, .cursor-glow { display: none !important; }
+            body { cursor: auto; }
+            a, button, .card, .like-btn { cursor: pointer; }
+            .ai-grid { grid-template-columns: 1fr; gap: 2rem; }
+            .ai-card-1,.ai-card-2,.ai-card-3,.ai-card-4,.ai-card-5 { grid-column: 1 / -1; transform: translateY(0) !important; }
+            .nav-links {
+                position: absolute; top: 64px; left: 0; right: 0; background: var(--color-white); border-bottom: 1px solid var(--color-gray);
+                flex-direction: column; padding: 16px; gap: 12px; transform: translateY(-10px); opacity: 0; visibility: hidden; transition: all var(--anim-base) var(--ease-base);
+            }
+            .nav-links.active { transform: translateY(0); opacity: 1; visibility: visible; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 跟随光标 -->
+    <div class="cursor-core" id="cursorCore"></div>
+    <div class="cursor-glow" id="cursorGlow"></div>
+
+    <!-- 导航栏 -->
+    <nav class="navbar" id="navbar">
+        <div class="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between h-16">
+            <a href="#hero" class="flex items-center gap-2 font-bold text-lg interactable">
+                <span class="text-red-600">FS</span> <span>园区网产线</span>
+            </a>
+            <div class="nav-links hidden md:flex items-center gap-2" id="navLinks">
+                <a href="#hero" class="nav-link interactable">首页</a>
+                <a href="#members" class="nav-link interactable">团队成员</a>
+                <a href="#videos" class="nav-link interactable">视频类型</a>
+                <a href="#ai-tools" class="nav-link interactable">AI工具探索</a>
+                <a href="#upload" class="nav-link interactable">作品上传</a>
+                <a href="#contact" class="nav-link interactable">联系我们</a>
+            </div>
+            <button class="md:hidden flex flex-col gap-1.5 p-2 interactable" id="menuBtn">
+                <span class="w-6 h-0.5 bg-gray-800 rounded"></span>
+                <span class="w-6 h-0.5 bg-gray-800 rounded"></span>
+                <span class="w-6 h-0.5 bg-gray-800 rounded"></span>
+            </button>
+        </div>
+    </nav>
+
+    <div id="smooth-wrapper">
+        <div id="smooth-content">
+            <!-- 首屏 -->
+            <section class="min-h-screen flex flex-col justify-center items-center text-center px-6 relative pt-20" id="hero">
+                <div class="absolute inset-0 bg-[url('images/avatar_jimeng.png')] bg-cover bg-center opacity-50 blur-sm"></div>
+                <div class="relative z-10 max-w-5xl mx-auto">
+                    <p class="text-gray-500 text-sm tracking-[0.2em] uppercase mb-6 gs_reveal">FS / 业务市场部 / 视觉媒体内容部</p>
+                    <h1 class="hero-title mb-8 gs_reveal">多媒体设计<br><span class="text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-red-400">园区网产线</span></h1>
+                    <p class="text-xl md:text-2xl text-gray-600 max-w-2xl mx-auto mb-12 leading-relaxed gs_reveal">
+                        专注于高质量企业级硬件产品视觉呈现、视频创意与核心技术展示。
+                    </p>
+                    <div class="flex flex-col sm:flex-row gap-4 justify-center gs_reveal">
+                        <a href="#videos" class="btn btn-red interactable">
+                            查看视频作品
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+                        </a>
+                        <a href="#members" class="btn btn-gray interactable">了解团队</a>
+                    </div>
+                    <div class="animate-bounce mt-16 gs_reveal">
+                        <svg class="w-8 h-8 text-gray-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 团队成员 -->
+            <section class="py-32 px-6 md:px-12 max-w-7xl mx-auto bg-gray-50 rounded-3xl" id="members">
+                <div class="text-center mb-20">
+                    <h2 class="section-title center gs_reveal">团队成员 / Members</h2>
+                    <p class="text-gray-500 mt-6 text-lg gs_reveal">业务市场部多媒体设计园区网产线核心成员</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" id="cards-container">
+                    <div class="card p-10 flex flex-col items-center text-center gs_reveal interactable" onclick="openMemberModal('冯学宇', '多媒体设计培训生', '负责企业网产品线、园区接入与核心汇聚交换机等多媒体内容策划与视频创意设计。','images/avatar_feng.png" alt="冯学宇" class="w-28 h-28 rounded-full object-cover mb-8 shadow-lg">
+                        <img src="images/avatar_feng.png" alt="冯学宇" class="w-28 h-28 rounded-full object-cover mb-8 shadow-lg">
+                        <h3 class="text-3xl font-bold mb-3">冯学宇</h3>
+                        <span class="tag mb-6">多媒体设计培训生</span>
+                        <p class="text-gray-600 leading-relaxed text-sm">负责企业网产品线、园区接入与核心汇聚交换机等多媒体内容策划与视频创意设计。</p>
+                        <p class="text-red-600 text-sm font-medium mt-6 flex items-center gap-1">查看详情 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></p>
+                        <div class="like-btn interactable" onclick="event.stopPropagation();doLike(this, event)">♡</div>
+                    </div>
+                    <div class="card p-10 flex flex-col items-center text-center gs_reveal interactable delay-100" onclick="openMemberModal('视觉设计师', '视觉设计师', '负责工业级硬件高精度建模、质感渲染、爆炸图及复杂场景特效制作。','images/avatar_max.jpg" alt="max" class="w-28 h-28 rounded-full object-cover mb-8 shadow-lg')">
+                         <img src="images/avatar_max.jpg" alt="max" class="w-28 h-28 rounded-full object-cover mb-8 shadow-lg">
+                        <h3 class="text-3xl font-bold mb-3">max</h3>
+                        <span class="tag mb-6" style="background: #666;">视觉设计师</span>
+                        <p class="text-gray-600 leading-relaxed text-sm">负责工业级硬件高精度建模、质感渲染、爆炸图及复杂场景特效制作。</p>
+                        <p class="text-gray-600 text-sm font-medium mt-6 flex items-center gap-1">查看详情 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></p>
+                        <div class="like-btn interactable" onclick="event.stopPropagation();doLike(this, event)">♡</div>
+                    </div>
+                    <div class="card p-10 flex flex-col items-center text-center gs_reveal interactable delay-200" onclick="openMemberModal('后期剪辑师', '后期剪辑师', '团队负责人','images/avatar_maple.jpg" alt="maple" class="w-28 h-28 rounded-full object-cover mb-8 shadow-lg')">
+                       <img src="images/avatar_maple.jpg" alt="maple" class="w-28 h-28 rounded-full object-cover mb-8 shadow-lg">
+                        <h3 class="text-3xl font-bold mb-3">maple</h3>
+                        <span class="tag mb-6" style="background: #666;">后期剪辑师</span>
+                        <p class="text-gray-600 leading-relaxed text-sm">负责实拍素材剪辑调色、AE图文包装、视频节奏把控与视觉合成输出。</p>
+                        <p class="text-gray-600 text-sm font-medium mt-6 flex items-center gap-1">查看详情 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></p>
+                        <div class="like-btn interactable" onclick="event.stopPropagation();doLike(this, event)">♡</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 视频区域 -->
+            <section class="py-32 px-6 md:px-12 max-w-7xl mx-auto" id="videos">
+                <div class="text-center mb-24">
+                    <h2 class="section-title center gs_reveal">产线视频类型 / Video Types</h2>
+                    <p class="text-gray-500 mt-6 text-lg gs_reveal">针对园区网交换机等产品打造的四大内容矩阵</p>
+                </div>
+                <div class="space-y-32">
+                    <div class="flex flex-col md:flex-row items-center gap-16 gs_reveal">
+                        <div class="w-full md:w-1/2 aspect-[16/10] bg-gray-100 rounded-2xl overflow-hidden relative group border border-gray-200 shadow-xl" onclick="openVideoModal('开箱视频','Unboxing','全方位展示产品的出厂状态、配件清单与外观细节。','videos/video_unbox.mp4','images/cover_unbox.jpg')">
+                            <div class="video-card-img absolute inset-0 bg-[url('images/cover_unbox.jpg')] bg-cover bg-center opacity-60"></div>
+                            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+                            <div class="absolute bottom-6 left-6 text-white">
+                                <span class="text-5xl mb-3 block">📦</span>
+                                <p class="text-sm text-gray-300">点击查看详情</p>
+                            </div>
+                            <div class="like-btn" onclick="event.stopPropagation();doLike(this)">♡</div>
+                        </div>
+                        <div class="w-full md:w-1/2">
+                            <h3 class="text-4xl md:text-5xl font-bold mb-4 tracking-tight">01. 开箱视频</h3>
+                            <p class="text-xl text-red-600 font-semibold tracking-wide uppercase mb-6">Unboxing</p>
+                            <p class="text-gray-600 leading-relaxed text-lg">全方位展示产品的出厂状态、配件清单与外观细节。</p>
+                            <button class="btn btn-red mt-8" onclick="openVideoModal('开箱视频','Unboxing','全方位展示产品的出厂状态、配件清单与外观细节。','videos/video_unbox.mp4','images/cover_unbox.jpg')">查看详情</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col md:flex-row-reverse items-center gap-16 gs_reveal">
+                        <div class="w-full md:w-1/2 aspect-[16/10] bg-gray-100 rounded-2xl overflow-hidden relative group border border-gray-200 shadow-xl" onclick="openVideoModal('卖点视频','Selling Points','深度聚焦核心竞争力，结合三维动效展示产品优势。','videos/video_sell.mp4','images/cover_sell.jpg')">
+                            <div class="video-card-img absolute inset-0 bg-[url('images/cover_sell.jpg')] bg-cover bg-center opacity-60"></div>
+                            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+                            <div class="absolute bottom-6 right-6 text-white text-right">
+                                <span class="text-5xl mb-3 block">💡</span>
+                                <p class="text-sm text-gray-300">点击查看详情</p>
+                            </div>
+                            <div class="like-btn" onclick="event.stopPropagation();doLike(this)">♡</div>
+                        </div>
+                        <div class="w-full md:w-1/2">
+                            <h3 class="text-4xl md:text-5xl font-bold mb-4 tracking-tight">02. 卖点视频</h3>
+                            <p class="text-xl text-red-600 font-semibold tracking-wide uppercase mb-6">Selling Points</p>
+                            <p class="text-gray-600 leading-relaxed text-lg">深度聚焦核心竞争力，结合三维动效展示产品优势。</p>
+                            <button class="btn btn-red mt-8" onclick="openVideoModal('卖点视频','Selling Points','深度聚焦核心竞争力，结合三维动效展示产品优势。','videos/video_sell.mp4','images/cover_sell.jpg')">查看详情</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col md:flex-row items-center gap-16 gs_reveal">
+                        <div class="w-full md:w-1/2 aspect-[16/10] bg-gray-100 rounded-2xl overflow-hidden relative group border border-gray-200 shadow-xl" onclick="openVideoModal('配置演示','Configuration','CLI/GUI 实操演示，降低上手门槛。','videos/video_config.mp4','images/cover_config.jpg')">
+                            <div class="video-card-img absolute inset-0 bg-[url('images/cover_config.jpg')] bg-cover bg-center opacity-60"></div>
+                            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+                            <div class="absolute bottom-6 left-6 text-white">
+                                <span class="text-5xl mb-3 block">⚙️</span>
+                                <p class="text-sm text-gray-300">点击查看详情</p>
+                            </div>
+                            <div class="like-btn" onclick="event.stopPropagation();doLike(this)">♡</div>
+                        </div>
+                        <div class="w-full md:w-1/2">
+                            <h3 class="text-4xl md:text-5xl font-bold mb-4 tracking-tight">03. 配置演示</h3>
+                            <p class="text-xl text-red-600 font-semibold tracking-wide uppercase mb-6">Configuration</p>
+                            <p class="text-gray-600 leading-relaxed text-lg">CLI/GUI 实操演示，降低上手门槛。</p>
+                            <button class="btn btn-red mt-8" onclick="openVideoModal('配置演示','Configuration','CLI/GUI 实操演示，降低上手门槛。','videos/video_config.mp4','images/cover_config.jpg')">查看详情</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col md:flex-row-reverse items-center gap-16 gs_reveal">
+                        <div class="w-full md:w-1/2 aspect-[16/10] bg-gray-100 rounded-2xl overflow-hidden relative group border border-gray-200 shadow-xl" onclick="openVideoModal('IXIA 测试','IXIA Testing','极限性能测试展示，用数据体现产品稳定性。','videos/video_ixia.mp4','images/cover_ixia.jpg')">
+                            <div class="video-card-img absolute inset-0 bg-[url('images/cover_ixia.jpg')] bg-cover bg-center opacity-60"></div>
+                            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+                            <div class="absolute bottom-6 right-6 text-white text-right">
+                                <span class="text-5xl mb-3 block">📊</span>
+                                <p class="text-sm text-gray-300">点击查看详情</p>
+                            </div>
+                            <div class="like-btn" onclick="event.stopPropagation();doLike(this)">♡</div>
+                        </div>
+                        <div class="w-full md:w-1/2">
+                            <h3 class="text-4xl md:text-5xl font-bold mb-4 tracking-tight">04. IXIA 测试</h3>
+                            <p class="text-xl text-red-600 font-semibold tracking-wide uppercase mb-6">IXIA Testing</p>
+                            <p class="text-gray-600 leading-relaxed text-lg">极限性能测试展示，用数据体现产品稳定性。</p>
+                            <button class="btn btn-red mt-8" onclick="openVideoModal('IXIA 测试','IXIA Testing','极限性能测试展示，用数据体现产品稳定性。','videos/video_ixia.mp4','images/cover_ixia.jpg')">查看详情</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AI工具探索 -->
+            <section class="py-32 px-6 md:px-12 max-w-7xl mx-auto" id="ai-tools">
+                <div class="text-center mb-20">
+                    <h2 class="section-title center gs_reveal">AI自动化工具探索</h2>
+                    <p class="text-gray-500 mt-6 text-lg gs_reveal">AI创意视频作品展示区</p>
+                </div>
+                <div class="ai-grid">
+                    <div class="ai-card-1 group gs_reveal">
+                        <div class="w-full aspect-[16/10] bg-gray-100 rounded-2xl overflow-hidden relative border border-gray-200 shadow-xl interactable cursor-pointer" onclick="openVideoModal('AI工具作品01','AI Tool 01','AI自动化创意视频演示','https://www.w3schools.com/html/mov_bbb.mp4')">
+                            <div class="video-card-img absolute inset-0 bg-[url('https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&q=80')] bg-cover bg-center opacity-80 pointer-events-none"></div>
+                            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none"></div>
+                            <div class="absolute bottom-6 left-6 text-white pointer-events-none">
+                                <p class="text-lg font-medium">AI作品 01</p>
+                                <p class="text-sm text-gray-300">点击播放</p>
+                            </div>
+                            <div class="like-btn interactable" onclick="event.stopPropagation();doLike(this, event)">♡</div>
+                        </div>
+                    </div>
+                    <div class="ai-card-2 group gs_reveal">
+                        <div class="w-full aspect-[16/10] bg-gray-100 rounded-2xl overflow-hidden relative border border-gray-200 shadow-xl interactable cursor-pointer" onclick="openVideoModal('AI工具作品02','AI Tool 02','AI自动化创意视频演示','https://www.w3schools.com/html/mov_bbb.mp4')">
+                            <div class="video-card-img absolute inset-0 bg-[url('https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?auto=format&fit=crop&q=80')] bg-cover bg-center opacity-80 pointer-events-none"></div>
+                            <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none"></div>
+                            <div class="absolute bottom-6 left-6 text-white pointer-events-none">
+                                <p class="text-lg font-medium">AI作品 02</p>
+                                <p class="text-sm text-gray-300">点击播放</p>
+                            </div>
+                            <div class="like-btn interactable" onclick="event.stopPropagation();doLike(this, event)">♡</div>
+                        </div>
+                    </div>
+                    <!-- 省略重复网格项演示 -->
+                </div>
+            </section>
+
+            <!-- 作品上传 -->
+            <section class="py-32 px-6 md:px-12 max-w-4xl mx-auto bg-gray-50 rounded-3xl my-20" id="upload">
+                <div class="text-center mb-16">
+                    <h2 class="section-title center gs_reveal">AI作品上传</h2>
+                    <p class="text-gray-500 mt-6 text-lg gs_reveal">上传AI创作图片、视频，填写相关信息提交作品</p>
+                </div>
+                <form id="uploadForm" class="space-y-6 gs_reveal interactable" onsubmit="handleFormSubmit(event)">
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">上传人 <span class="text-red-600">*</span></label>
+                        <input type="text" id="uploadUser" class="form-input interactable" placeholder="请输入姓名/昵称">
+                        <div class="error-tip" id="userTip">请填写上传人</div>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">上传附件 <span class="text-red-600">*</span></label>
+                        <div class="file-area interactable" id="fileArea" onclick="document.getElementById('fileInput').click()">
+                            <input type="file" id="fileInput" class="hidden" accept=".jpg,.jpeg,.png,.gif,.mp4" onchange="handleFileSelect(event)">
+                            <p class="text-gray-600 font-medium">点击选择文件 或 拖拽文件到此处</p>
+                            <p class="tip-text">支持图片/视频，单文件 ≤ 100MB</p>
+                            <img id="imgPreview" class="file-preview" alt="图片预览">
+                            <video id="videoPreview" class="file-preview" controls></video>
+                        </div>
+                        <div class="error-tip" id="fileTip">请选择合规文件</div>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">作品说明 <span class="text-red-600">*</span></label>
+                        <textarea id="uploadDesc" class="form-textarea h-28 resize-none interactable" placeholder="请描述作品内容、创作思路..."></textarea>
+                        <div class="error-tip" id="descTip">请填写作品说明</div>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+                        <button type="submit" class="btn btn-red interactable">提交作品</button>
+                        <button type="reset" class="btn btn-gray interactable" onclick="resetPreviews()">重置</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- 联系我们 -->
+            <section class="py-32 px-6 md:px-12 max-w-4xl mx-auto bg-gray-50 rounded-3xl my-20" id="contact">
+                <div class="text-center">
+                    <h2 class="section-title center gs_reveal">联系我们</h2>
+                    <p class="text-gray-500 mt-6 text-lg gs_reveal max-w-2xl mx-auto">如需了解更多园区网产线多媒体设计能力或合作流程，欢迎联系。</p>
+                    <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center gs_reveal">
+                        <a href="mailto:contact@fs.example.com" class="btn btn-red interactable">
+                            发送邮件
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <footer class="py-12 text-center border-t border-gray-200 mt-20">
+                <p class="text-gray-500 text-sm">© 2026 FS 业务市场部 - 多媒体内容设计组 / 园区网产线</p>
+                <p class="text-gray-400 text-xs mt-2">Driven by Code & Creativity</p>
+            </footer>
+        </div>
+    </div>
+
+    <!-- 弹窗：团队成员 -->
+    <div class="modal-overlay" id="memberModal" onclick="closeModal('memberModal')">
+        <div class="modal-content relative p-8 md:p-10 interactable" onclick="event.stopPropagation()">
+            <button class="modal-close interactable" onclick="closeModal('memberModal')">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <div class="text-center">
+                <img id="memberModalAvatar" src="" alt="" class="w-24 h-24 rounded-full object-cover mx-auto mb-6 shadow-lg">
+                <h3 class="text-3xl font-bold mb-2" id="memberModalName"></h3>
+                <span class="tag mb-6" id="memberModalRole"></span>
+                <p class="text-gray-600 leading-relaxed text-lg" id="memberModalDesc"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：视频播放 -->
+    <div class="modal-overlay" id="videoModal" onclick="closeModal('videoModal')">
+        <div class="modal-content relative p-8 md:p-10 interactable" onclick="event.stopPropagation()">
+            <button class="modal-close interactable" onclick="closeModal('videoModal')">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <div class="text-center">
+                <h3 class="text-3xl font-bold mb-2" id="videoModalTitle"></h3>
+                <p class="text-red-600 font-semibold tracking-wide uppercase mb-6" id="videoModalSubtitle"></p>
+                <p class="text-gray-600 leading-relaxed text-sm mb-4" id="videoModalDesc"></p>
+                <video id="modalVideo" controls class="w-full rounded-xl interactable bg-black">
+                    <source id="videoSource" src="" type="video/mp4">
+                    浏览器不支持 HTML5 视频播放。
+                </video>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：提示信息 (修复被截断的部分) -->
+    <div class="modal-overlay" id="tipModal" onclick="closeModal('tipModal')">
+        <div class="modal-content relative p-8 md:p-10 max-w-md interactable" onclick="event.stopPropagation()">
+            <button class="modal-close interactable" onclick="closeModal('tipModal')">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <div class="text-center">
+                <h3 class="text-2xl font-bold mb-4" id="tipModalTitle">提示</h3>
+                <p class="text-gray-600 leading-relaxed" id="tipModalDesc">操作成功！</p>
+                <button class="btn btn-red mt-8 interactable" onclick="closeModal('tipModal')">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= JS 交互逻辑 ================= -->
+    <script>
+        // 1. Lenis 平滑滚动
+        const lenis = new Lenis({
+            duration: 1.2,
+            easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), 
+            smoothWheel: true
+        });
+        function raf(time) { lenis.raf(time); requestAnimationFrame(raf); }
+        requestAnimationFrame(raf);
+
+        // 2. 导航栏滚动变化 & 移动端菜单
+        const navbar = document.getElementById('navbar');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 50) navbar.classList.add('scrolled');
+            else navbar.classList.remove('scrolled');
+        });
+        const menuBtn = document.getElementById('menuBtn');
+        const navLinks = document.getElementById('navLinks');
+        menuBtn.addEventListener('click', () => {
+            navLinks.classList.toggle('hidden');
+            navLinks.classList.toggle('flex');
+            navLinks.classList.toggle('active');
+        });
+
+        // 3. GSAP 滚动渐入动画
+        gsap.registerPlugin(ScrollTrigger);
+        document.querySelectorAll('.gs_reveal').forEach((elem) => {
+            gsap.to(elem, {
+                scrollTrigger: { trigger: elem, start: "top 85%", toggleClass: "active", once: true }
+            });
+        });
+
+        // 4. 自定义光标跟随 (移动端自动忽略)
+        const cursorCore = document.getElementById('cursorCore');
+        const cursorGlow = document.getElementById('cursorGlow');
+        let mouseX = window.innerWidth/2, mouseY = window.innerHeight/2;
+        let cX = mouseX, cY = mouseY;
+
+        window.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX; mouseY = e.clientY;
+        });
+        
+        gsap.ticker.add(() => {
+            cX += (mouseX - cX) * 0.2; cY += (mouseY - cY) * 0.2;
+            cursorCore.style.transform = `translate(calc(-50% + ${cX}px), calc(-50% + ${cY}px))`;
+            cursorGlow.style.transform = `translate(calc(-50% + ${cX}px), calc(-50% + ${cY}px))`;
+        });
+
+        // 绑定光标悬停交互
+        document.querySelectorAll('.interactable, a, button').forEach(el => {
+            el.addEventListener('mouseenter', () => document.body.classList.add('is-hover'));
+            el.addEventListener('mouseleave', () => document.body.classList.remove('is-hover'));
+        });
+
+        // 5. 卡片鼠标悬浮发光效果
+        document.querySelectorAll(".card").forEach(card => {
+            card.addEventListener('mousemove', e => {
+                const rect = card.getBoundingClientRect();
+                card.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+                card.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+            });
+        });
+
+        // 6. 爱心点赞与撒花特效
+        function doLike(element, event) {
+            element.classList.toggle('active');
+            if(element.classList.contains('active')) {
+                element.innerHTML = '♥';
+                // 撒花位置计算
+                const rect = element.getBoundingClientRect();
+                const x = (rect.left + rect.width/2) / window.innerWidth;
+                const y = (rect.top + rect.height/2) / window.innerHeight;
+                confetti({
+                    particleCount: 50, spread: 60, origin: { x: x, y: y },
+                    colors: ['#ef4444', '#f43f5e', '#ffffff'], disableForReducedMotion: true
+                });
+            } else {
+                element.innerHTML = '♡';
+            }
+        }
+
+        // 7. 弹窗控制逻辑
+        function openMemberModal(name, role, desc, avatar) {
+            document.getElementById('memberModalName').innerText = name;
+            document.getElementById('memberModalRole').innerText = role;
+            document.getElementById('memberModalDesc').innerText = desc;
+            document.getElementById('memberModalAvatar').src = avatar;
+            document.getElementById('memberModal').classList.add('active');
+        }
+
+        function openVideoModal(title, subtitle, desc, vidSrc) {
+            document.getElementById('videoModalTitle').innerText = title;
+            document.getElementById('videoModalSubtitle').innerText = subtitle;
+            document.getElementById('videoModalDesc').innerText = desc;
+            
+            const video = document.getElementById('modalVideo');
+            video.src = vidSrc;
+            document.getElementById('videoModal').classList.add('active');
+            video.play().catch(e => console.log("Auto-play blocked by browser."));
+        }
+
+        function showTip(title, message) {
+            document.getElementById('tipModalTitle').innerText = title;
+            document.getElementById('tipModalDesc').innerText = message;
+            document.getElementById('tipModal').classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+            // 如果关闭的是视频弹窗，暂停视频
+            if(id === 'videoModal') {
+                const video = document.getElementById('modalVideo');
+                video.pause();
+                video.currentTime = 0;
+            }
+        }
+
+        // 8. 上传表单文件选择与预览验证
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            const imgPreview = document.getElementById('imgPreview');
+            const videoPreview = document.getElementById('videoPreview');
+            imgPreview.style.display = 'none'; videoPreview.style.display = 'none';
+
+            if(file.type.startsWith('image/')) {
+                imgPreview.src = URL.createObjectURL(file);
+                imgPreview.style.display = 'block';
+            } else if(file.type.startsWith('video/')) {
+                videoPreview.src = URL.createObjectURL(file);
+                videoPreview.style.display = 'block';
+            }
+        }
+
+        function resetPreviews() {
+            document.getElementById('imgPreview').style.display = 'none';
+            document.getElementById('videoPreview').style.display = 'none';
+        }
+
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            let isValid = true;
+            const user = document.getElementById('uploadUser');
+            const desc = document.getElementById('uploadDesc');
+            
+            // 简单校验
+            if(!user.value.trim()) { user.classList.add('error'); document.getElementById('userTip').style.display='block'; isValid=false; }
+            else { user.classList.remove('error'); document.getElementById('userTip').style.display='none'; }
+
+            if(!desc.value.trim()) { desc.classList.add('error'); document.getElementById('descTip').style.display='block'; isValid=false; }
+            else { desc.classList.remove('error'); document.getElementById('descTip').style.display='none'; }
+
+            if(isValid) {
+                showTip("提交成功", "您的作品已成功上传，我们会尽快审核处理！");
+                e.target.reset();
+                resetPreviews();
+            }
+        }
+    </script>
+</body>
+</html>
